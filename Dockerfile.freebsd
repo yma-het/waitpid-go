@@ -1,0 +1,105 @@
+# FROM ubuntu:24.04
+
+# # Устанавливаем зависимости: QEMU user-mode, Go, xz-utils
+# RUN apt-get update && apt-get install -y \
+#     qemu-user \
+#     curl \
+#     git \
+#     xz-utils \
+#     file \
+#     && rm -rf /var/lib/apt/lists/*
+
+# # Устанавливаем Go
+# RUN curl -L https://go.dev/dl/go1.23.0.linux-amd64.tar.gz -o /tmp/go.tar.gz && \
+#     tar -C /usr/local -xzf /tmp/go.tar.gz && \
+#     rm /tmp/go.tar.gz && \
+#     ln -s /usr/local/go/bin/go /usr/bin/go && \
+#     ln -s /usr/local/go/bin/gofmt /usr/bin/gofmt
+
+# # Скачиваем FreeBSD-библиотеки и бинарники для user-mode эмуляции
+# # Используем правильный URL и проверяем, что файл является XZ-архивом
+# RUN mkdir -p /usr/local/freebsd/lib && \
+#     curl -L https://download.freebsd.org/releases/amd64/14.3-RELEASE/base.txz -o /tmp/base.txz && \
+#     [ -s /tmp/base.txz ] || (echo "Failed to download base.txz" && exit 1) && \
+#     file /tmp/base.txz | grep -q "XZ compressed data" || (echo "Downloaded file is not an XZ archive" && cat /tmp/base.txz && exit 1) && \
+#     tar -C /usr/local/freebsd -xJf /tmp/base.txz ./lib ./usr/lib ./bin ./usr/bin && \
+#     rm /tmp/base.txz
+
+# # Настраиваем LD_LIBRARY_PATH для QEMU
+# ENV LD_LIBRARY_PATH=/usr/local/freebsd/lib:/usr/local/freebsd/usr/lib
+
+# # Рабочая директория
+# WORKDIR /app
+# COPY . .
+
+# # Компилируем тест для FreeBSD
+# RUN GOOS=freebsd GOARCH=amd64 go test -c -o test.freebsd
+
+# # Запускаем тест через qemu-bsd-user
+# CMD ["/usr/bin/qemu-x86_64", "-L", "/usr/local/freebsd", "./test.freebsd", "-test.v"]
+
+FROM ubuntu:24.04
+
+# Устанавливаем зависимости: QEMU user-mode, Go, xz-utils, file
+RUN apt-get update && apt-get install -y \
+    libelf-dev python-is-python3 python3-pip python3-setuptools \
+    ninja-build pkg-config libglib2.0-dev git libbsd-dev libkqueue-dev libkqueue0t64 clang
+
+RUN mkdir git && \
+    cd git && \
+    git clone -b blitz https://github.com/sobomax/qemu-bsd-user-l4b.git bsd-user && \
+    cd bsd-user && \
+    mkdir 00-bsd-user
+WORKDIR /git/bsd-user/00-bsd-user/
+RUN ../configure --disable-system --static --target-list=x86_64-bsd-user --cc=clang
+RUN ninja
+
+run apt install -y curl
+
+# Устанавливаем Go (Go 1.20 для лучшей совместимости)
+RUN curl -L https://go.dev/dl/go1.23.2.linux-amd64.tar.gz -o /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz && \
+    ln -s /usr/local/go/bin/go /usr/bin/go && \
+    ln -s /usr/local/go/bin/gofmt /usr/bin/gofmt
+
+# Рабочая директория
+WORKDIR /app
+COPY . .
+# 
+# Компилируем example.go для FreeBSD
+RUN cd example && GOOS=freebsd GOARCH=amd64 go build -o example example.go
+# 
+# Запускаем с отладкой через qemu-bsd-user
+CMD ["/usr/bin/qemu-x86_64", "-L", "/usr/local/freebsd", "-strace", "./example"]
+
+
+# # Устанавливаем Go (Go 1.20 для лучшей совместимости)
+# RUN curl -L https://go.dev/dl/go1.23.2.linux-amd64.tar.gz -o /tmp/go.tar.gz && \
+#     tar -C /usr/local -xzf /tmp/go.tar.gz && \
+#     rm /tmp/go.tar.gz && \
+#     ln -s /usr/local/go/bin/go /usr/bin/go && \
+#     ln -s /usr/local/go/bin/gofmt /usr/bin/gofmt
+
+# # Скачиваем FreeBSD-библиотеки и бинарники для user-mode эмуляции
+# # Используем правильный URL и резервное зеркало
+# RUN mkdir -p /usr/local/freebsd && \
+#     curl -L https://download.freebsd.org/releases/amd64/14.3-RELEASE/base.txz -o /tmp/base.txz  && \
+#     [ -s /tmp/base.txz ] || (echo "Failed to download base.txz" && exit 1) && \
+#     file /tmp/base.txz | grep -q "XZ compressed data" || (echo "Downloaded file is not an XZ archive" && cat /tmp/base.txz && exit 1) && \
+#     tar -C /usr/local/freebsd -xJf /tmp/base.txz ./lib ./usr/lib ./bin ./usr/bin ./libexec ./sbin ./usr/sbin && \
+#     rm /tmp/base.txz
+
+# # Настраиваем LD_LIBRARY_PATH и PATH для QEMU
+# ENV LD_LIBRARY_PATH=/usr/local/freebsd/lib:/usr/local/freebsd/usr/lib
+# ENV PATH=/usr/local/freebsd/bin:/usr/local/freebsd/usr/bin:/usr/local/freebsd/sbin:/usr/local/freebsd/usr/sbin:$PATH
+
+# # Рабочая директория
+# WORKDIR /app
+# COPY . .
+
+# # Компилируем example.go для FreeBSD
+# RUN cd example && GOOS=freebsd GOARCH=amd64 go build -o example example.go
+
+# # Запускаем с отладкой через qemu-bsd-user
+# CMD ["/usr/bin/qemu-x86_64", "-L", "/usr/local/freebsd", "-strace", "./example"]
