@@ -73,15 +73,15 @@ RUN curl -L https://go.dev/dl/go1.23.2.linux-amd64.tar.gz -o /tmp/go.tar.gz && \
     ln -s /usr/local/go/bin/go /usr/bin/go && \
     ln -s /usr/local/go/bin/gofmt /usr/bin/gofmt
 
-# Рабочая директория
-WORKDIR /app
-COPY . .
-# 
-# Компилируем example.go для FreeBSD
-RUN cd example && GOOS=freebsd GOARCH=amd64 go build -o example example.go
-# 
-# Запускаем с отладкой через qemu-bsd-user
-CMD ["/usr/bin/qemu-x86_64", "-L", "/usr/local/freebsd", "-strace", "./example"]
+# # Рабочая директория
+# WORKDIR /app
+# COPY . .
+# # 
+# # Компилируем example.go для FreeBSD
+# RUN cd example && GOOS=freebsd GOARCH=amd64 go build -o example example.go
+# # 
+# # Запускаем с отладкой через qemu-bsd-user
+# CMD ["/usr/bin/qemu-x86_64", "-L", "/usr/local/freebsd", "-strace", "./example"]
 
 
 # # Устанавливаем Go (Go 1.20 для лучшей совместимости)
