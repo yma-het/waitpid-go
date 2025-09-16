@@ -1,33 +1,36 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/yma-het/waitpid-go"
 )
 
 func main() {
+	// disable printing time
+	log.SetFlags(0)
+	stdoutLogger := log.New(os.Stdout, "", 0)
+	if len(os.Args) != 2 {
+		log.Printf("waitpid demo arguments: PID")
+		return
+	}
 	pidStr := os.Args[1]
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
-		fmt.Println("strconv.Atoi: %v", err)
-		return
+		log.Fatalf("strconv.Atoi: %v", err)
 	}
 	w := waitpid.GetWaitHandle()
-	// windows
-	//fd, err := w.Open(0x114)
 	fd, err := w.Open(pid)
 	if err != nil {
-		fmt.Println("w.Open: %v", err)
-		return
+		log.Fatalf("w.Open: %v", err)
 	}
-	fmt.Println("fd: %d", fd)
+	stdoutLogger.Printf("started waiting: %d\n", time.Now().UnixNano())
 	err = w.Wait(fd)
 	if err != nil {
-		fmt.Println("w.Wait: %v", err)
-		return
+		log.Fatalf("w.Wait: %v", err)
 	}
-
+	stdoutLogger.Printf("waited: %d\n", time.Now().UnixNano())
 }
