@@ -2,38 +2,17 @@ package waitpid
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
 )
 
-func getPingPid(output string) (int, error) {
-	lines := strings.Split(output, "\n")
-	// skip headers and delimiters:
-	//Image Name                     PID Session Name        Session#    Mem Usage
-	//========================= ======== ================ =========== ============
-	//start.exe                       32 Console                    1     16,328 K
-
-	lines = lines[2:]
-	for _, line := range lines {
-		if strings.Contains(line, "ping.exe") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				return 0, errors.New("invalid line format")
-			}
-			return strconv.Atoi(fields[1])
-		}
-	}
-	return 0, errors.New("ping.exe not found")
-}
-func TestWindows(t *testing.T) {
+func TestLinux(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -45,8 +24,9 @@ func TestWindows(t *testing.T) {
 	defer provider.Close()
 
 	container, err := provider.RunContainer(ctx, testcontainers.ContainerRequest{
-		Image: "scottyhardy/docker-wine",
-		Cmd:   []string{"tail", "-f", "/dev/null"},
+		Image:        "ubuntu:22.04",
+		ExposedPorts: []string{},
+		Cmd:          []string{"tail", "-f", "/dev/null"},
 	})
 	if err != nil {
 		t.Fatalf("failed to run container: %v", err)
@@ -59,29 +39,28 @@ func TestWindows(t *testing.T) {
 		}
 		t.Fatalf("failed to start container: %v", err)
 	}
-	defer container.Terminate(ctx)
 
-	compiledBinaryPath, err := CompileFor("windows")
+	compiledBinaryPath, err := CompileFor("linux")
 	if err != nil {
 		t.Fatalf("failed to compile test binary: %v", err)
 	}
 	defer os.Remove(compiledBinaryPath)
 
-	err = container.CopyFileToContainer(ctx, compiledBinaryPath, "/app.exe", 0755)
+	err = container.CopyFileToContainer(ctx, compiledBinaryPath, "/app", 0755)
 	if err != nil {
 		t.Fatalf("failed to copy test binary to container: %v", err)
 	}
 
 	// this will spawn sleep process and print it's pid to stdout
 	// 1000 is greater than 600, default go test timeout
-	log, _, err := ExecGetLog(ctx, t, container, []string{"wine", "cmd.exe", "/c", "START /B ping -n 1000 127.0.0.1  && tasklist"})
+	log, _, err := ExecGetLog(ctx, t, container, []string{"/bin/bash", "-c", "sleep 1000 & echo $!"})
 	if err != nil {
 		t.Fatalf("failed to spawn sleep process: %v", err)
 	}
 
-	pid, err := getPingPid(log)
+	pid, err := strconv.Atoi(log[:len(log)-1])
 	if err != nil {
-		t.Fatalf("failed to get ping pid from (%s): %v", log, err)
+		t.Fatalf("failed to convert container output to pid from (%s): %v", log, err)
 	}
 
 	c := make(chan int64)
@@ -89,7 +68,7 @@ func TestWindows(t *testing.T) {
 
 	t.Logf("will wait for pid: %d", pid)
 	go func() {
-		log, _, err := ExecGetLog(ctx, t, container, []string{"wine", "/app.exe", strconv.Itoa(pid)})
+		log, _, err := ExecGetLog(ctx, t, container, []string{"/app", strconv.Itoa(pid)})
 		if err != nil {
 			e <- err
 		}
@@ -106,9 +85,9 @@ func TestWindows(t *testing.T) {
 	time.Sleep(time.Duration(randomDealy))
 
 	killTime := time.Now().UnixNano()
-	_, _, err = ExecGetLog(ctx, t, container, []string{"wine", "cmd.exe", "/c", "taskkill /F /IM ping.exe"})
+	_, _, err = ExecGetLog(ctx, t, container, []string{"kill", strconv.Itoa(pid)})
 	if err != nil {
-		t.Fatalf("failed to kill ping process: %v", err)
+		t.Fatalf("failed to kill process with pid %d: %v", pid, err)
 	}
 
 	select {
