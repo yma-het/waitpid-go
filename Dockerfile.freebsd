@@ -1,0 +1,28 @@
+FROM ubuntu:24.04
+
+# Install build dependencies
+RUN apt update && apt install -y \
+    libelf-dev python-is-python3 python3-pip python3-setuptools \
+    ninja-build pkg-config libglib2.0-dev git libbsd-dev clang cmake file wget
+RUN mkdir git
+WORKDIR /git
+
+# Build libkqueue from source, because in-distro version does not export some necessary symbols
+RUN git clone https://github.com/mheily/libkqueue.git
+RUN cd libkqueue && \
+    mkdir build && \
+    cd build && \
+    cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib .. && \
+    make && \
+    cpack -G DEB && \
+    apt install ./libkqueue*.deb
+
+# Build qemu-bsd-user-l4b
+RUN git clone -b blitz https://github.com/yma-het/qemu-bsd-user-l4b.git bsd-user && \
+    cd bsd-user && \
+    git checkout plain-go && \
+    mkdir 00-bsd-user
+WORKDIR /git/bsd-user/00-bsd-user/
+RUN case $(dpkg --print-architecture) in "amd64") export ARCHITECTURE=x86_64 ;; "arm64") export ARCHITECTURE=aarch64 ;; esac && \
+    ../configure --disable-system --static --target-list=${ARCHITECTURE}-bsd-user --cc=clang
+RUN ninja
