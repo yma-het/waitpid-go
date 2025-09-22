@@ -59,7 +59,6 @@ func TestWindows(t *testing.T) {
 		}
 		t.Fatalf("failed to start container: %v", err)
 	}
-	defer container.Terminate(ctx)
 
 	compiledBinaryPath, err := CompileFor("windows")
 	if err != nil {
