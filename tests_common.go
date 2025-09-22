@@ -145,7 +145,6 @@ func InstallGolang(ctx context.Context, t *testing.T, c testcontainers.Container
 }
 
 func CompileTestBinary(ctx context.Context, t *testing.T, c testcontainers.Container, os string) error {
-	// FIXME: Copy before building and make mount RO
 	optionCwd := tcexec.WithWorkingDir("/app/example")
 	optionOS := tcexec.WithEnv([]string{fmt.Sprintf("GOOS=%s", os)})
 
